@@ -21,6 +21,7 @@ app.use('/api/churches', require('./routes/churches'));
 app.use('/api/events', require('./routes/events'));
 app.use('/api/photos', require('./routes/photos'));
 app.use('/api/promo', require('./routes/promo'));
+app.use('/api/pastor-resources', require('./routes/pastorResources'));
 
 // Contact email
 const transporter = nodemailer.createTransport({
