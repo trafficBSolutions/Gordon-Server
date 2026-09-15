@@ -42,34 +42,41 @@ router.get('/', async (req, res) => {
 });
 
 // Admin: upload a video file to Cloudinary
-router.post('/upload', auth, upload.single('video'), async (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'No video file uploaded' });
-  try {
-    let promo = await Promo.findOne();
-
-    // Delete old Cloudinary video if it exists
-    if (promo && promo.cloudinaryId) {
-      await cloudinary.uploader.destroy(promo.cloudinaryId, { resource_type: 'video' });
+router.post('/upload', auth, (req, res) => {
+  upload.single('video')(req, res, async (err) => {
+    if (err) {
+      console.error('Multer/Cloudinary upload error:', err);
+      return res.status(500).json({ error: err.message || 'Upload failed' });
     }
+    if (!req.file) return res.status(400).json({ error: 'No video file uploaded' });
 
-    const url = req.file.path; // Cloudinary URL
-    const cloudinaryId = req.file.filename; // Cloudinary public_id
+    try {
+      let promo = await Promo.findOne();
 
-    if (!promo) {
-      promo = await Promo.create({ title: req.body.title || '', url, cloudinaryId, type: 'upload' });
-    } else {
-      promo.title = req.body.title || promo.title;
-      promo.url = url;
-      promo.cloudinaryId = cloudinaryId;
-      promo.filename = '';
-      promo.type = 'upload';
-      await promo.save();
+      // Delete old Cloudinary video if it exists
+      if (promo && promo.cloudinaryId) {
+        await cloudinary.uploader.destroy(promo.cloudinaryId, { resource_type: 'video' }).catch(() => {});
+      }
+
+      const url = req.file.path;
+      const cloudinaryId = req.file.filename;
+
+      if (!promo) {
+        promo = await Promo.create({ title: req.body.title || '', url, cloudinaryId, type: 'upload' });
+      } else {
+        promo.title = req.body.title || promo.title;
+        promo.url = url;
+        promo.cloudinaryId = cloudinaryId;
+        promo.filename = '';
+        promo.type = 'upload';
+        await promo.save();
+      }
+      res.json(promo);
+    } catch (dbErr) {
+      console.error('DB error after upload:', dbErr);
+      res.status(500).json({ error: 'Database error after upload' });
     }
-    res.json(promo);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Server error' });
-  }
+  });
 });
 
 // Admin: set a YouTube URL instead
