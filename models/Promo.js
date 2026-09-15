@@ -4,6 +4,7 @@ const promoSchema = new mongoose.Schema({
   title: String,
   url: String,
   filename: String,
+  cloudinaryId: String,
   type: { type: String, enum: ['upload', 'youtube'], default: 'youtube' },
 });
 
