@@ -1,24 +1,34 @@
 const express = require('express');
 const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
 const router = express.Router();
+const cloudinary = require('cloudinary').v2;
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const auth = require('./authMiddleware');
 
 const mongoose = require('mongoose');
 const blewerFormSchema = new mongoose.Schema({
   title: String,
-  filename: String,
   url: String,
+  publicId: String,
   createdAt: { type: Date, default: Date.now },
 });
 const BlewerForm = mongoose.model('BlewerForm', blewerFormSchema);
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, path.join(__dirname, '..', 'uploads')),
-  filename: (req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`),
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
 });
-const upload = multer({ storage, limits: { fileSize: 50 * 1024 * 1024 } }); // 50MB
+
+const storage = new CloudinaryStorage({
+  cloudinary,
+  params: async (req, file) => ({
+    folder: 'blewer-forms',
+    resource_type: 'auto',
+    public_id: `${Date.now()}-${file.originalname.replace(/\s+/g, '_')}`,
+  }),
+});
+const upload = multer({ storage, limits: { fileSize: 50 * 1024 * 1024 } });
 
 router.get('/', async (req, res) => {
   try {
@@ -35,8 +45,8 @@ router.post('/', auth, upload.single('form'), async (req, res) => {
   try {
     const form = await BlewerForm.create({
       title: title || req.file.originalname,
-      filename: req.file.filename,
-      url: `/uploads/${req.file.filename}`,
+      url: req.file.path,
+      publicId: req.file.filename,
     });
     res.status(201).json(form);
   } catch (err) {
@@ -48,8 +58,9 @@ router.delete('/:id', auth, async (req, res) => {
   try {
     const form = await BlewerForm.findById(req.params.id);
     if (!form) return res.status(404).json({ error: 'Not found' });
-    const filePath = path.join(__dirname, '..', 'uploads', form.filename);
-    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    if (form.publicId) {
+      await cloudinary.uploader.destroy(form.publicId, { resource_type: 'auto' }).catch(() => {});
+    }
     await BlewerForm.findByIdAndDelete(req.params.id);
     res.json({ success: true });
   } catch (err) {
