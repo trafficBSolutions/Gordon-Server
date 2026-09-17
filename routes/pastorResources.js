@@ -1,16 +1,26 @@
 const express = require('express');
 const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
 const router = express.Router();
+const cloudinary = require('cloudinary').v2;
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const PastorResource = require('../models/PastorResource');
 const auth = require('./authMiddleware');
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, path.join(__dirname, '..', 'uploads')),
-  filename: (req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`),
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
 });
-const upload = multer({ storage, limits: { fileSize: 500 * 1024 * 1024 } }); // 500MB limit
+
+const storage = new CloudinaryStorage({
+  cloudinary,
+  params: async (req, file) => ({
+    folder: 'pastor-resources',
+    resource_type: 'auto',
+    public_id: `${Date.now()}-${file.originalname.replace(/\s+/g, '_')}`,
+  }),
+});
+const upload = multer({ storage, limits: { fileSize: 500 * 1024 * 1024 } });
 
 router.get('/', async (req, res) => {
   try {
@@ -41,7 +51,7 @@ router.post('/upload', auth, upload.single('video'), async (req, res) => {
   try {
     const resource = await PastorResource.create({
       title,
-      url: `/uploads/${req.file.filename}`,
+      url: req.file.path,
       description: description || '',
       type: 'file',
     });
@@ -55,9 +65,9 @@ router.delete('/:id', auth, async (req, res) => {
   try {
     const resource = await PastorResource.findById(req.params.id);
     if (!resource) return res.status(404).json({ error: 'Not found' });
-    if (resource.type === 'file') {
-      const filePath = path.join(__dirname, '..', 'uploads', path.basename(resource.url));
-      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    if (resource.type === 'file' && resource.url) {
+      const publicId = resource.url.split('/').slice(-2).join('/').replace(/\.[^/.]+$/, '');
+      await cloudinary.uploader.destroy(publicId, { resource_type: 'auto' }).catch(() => {});
     }
     await PastorResource.findByIdAndDelete(req.params.id);
     res.json({ success: true });
