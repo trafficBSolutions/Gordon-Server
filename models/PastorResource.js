@@ -4,6 +4,7 @@ const pastorResourceSchema = new mongoose.Schema({
   title: { type: String, required: true },
   url: { type: String, required: true },
   description: String,
+  type: { type: String, enum: ['url', 'file'], default: 'url' },
   createdAt: { type: Date, default: Date.now },
 });
 
