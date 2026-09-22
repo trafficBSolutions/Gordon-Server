@@ -3,6 +3,8 @@ const cors = require('cors');
 const nodemailer = require('nodemailer');
 require('dotenv').config();
 const connectDB = require('./db');
+const Contact = require('./models/Contact');
+const BlewerIntake = require('./models/BlewerIntake');
 
 connectDB();
 
@@ -21,6 +23,7 @@ app.use('/api/photos', require('./routes/photos'));
 app.use('/api/promo', require('./routes/promo'));
 app.use('/api/pastor-resources', require('./routes/pastorResources'));
 app.use('/api/blewer-forms', require('./routes/blewerForms'));
+app.use('/api/submissions', require('./routes/submissions'));
 
 // Email transporter
 const transporter = nodemailer.createTransport({
@@ -155,7 +158,7 @@ const buildIntakeHtml = (data, isConfirmation = false) => {
   </html>`;
 };
 
-// Blewer intake form — sends to Blewer staff AND confirmation to submitter
+// Blewer intake form — saves to MongoDB + sends emails
 app.post('/api/blewer-intake', async (req, res) => {
   const { name, phone } = req.body;
   const submitterEmail = req.body.email;
@@ -165,6 +168,9 @@ app.post('/api/blewer-intake', async (req, res) => {
   }
 
   try {
+    // Save to MongoDB
+    await BlewerIntake.create(req.body);
+
     // Email 1: notify Blewer staff
     await transporter.sendMail({
       from: `"Blewer Food Center Intake" <${process.env.SMTP_USER}>`,
@@ -195,6 +201,9 @@ app.post('/api/contact', async (req, res) => {
   const { name, email, message } = req.body;
   if (!name || !email || !message) return res.status(400).json({ error: 'All fields required' });
   try {
+    // Save to MongoDB
+    await Contact.create({ name, email, message });
+
     await transporter.sendMail({
       from: `"${name}" <${process.env.SMTP_USER}>`,
       replyTo: email,
