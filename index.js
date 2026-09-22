@@ -1,12 +1,23 @@
 const express = require('express');
 const cors = require('cors');
 const nodemailer = require('nodemailer');
+const axios = require('axios');
 require('dotenv').config();
 const connectDB = require('./db');
 const Contact = require('./models/Contact');
 const BlewerIntake = require('./models/BlewerIntake');
 
 connectDB();
+
+// reCAPTCHA verification helper
+const verifyCaptcha = async (token) => {
+  const { data } = await axios.post(
+    `https://www.google.com/recaptcha/api/siteverify`,
+    null,
+    { params: { secret: process.env.RECAPTCHA_SECRET_KEY, response: token } }
+  );
+  return data.success;
+};
 
 const app = express();
 app.use(cors({
@@ -160,12 +171,14 @@ const buildIntakeHtml = (data, isConfirmation = false) => {
 
 // Blewer intake form — saves to MongoDB + sends emails
 app.post('/api/blewer-intake', async (req, res) => {
-  const { name, phone } = req.body;
-  const submitterEmail = req.body.email;
+  const { name, phone, captchaToken } = req.body;
 
-  if (!name || !phone) {
-    return res.status(400).json({ error: 'Name and phone are required' });
-  }
+  if (!name || !phone) return res.status(400).json({ error: 'Name and phone are required' });
+
+  const captchaValid = await verifyCaptcha(captchaToken).catch(() => false);
+  if (!captchaValid) return res.status(400).json({ error: 'reCAPTCHA verification failed' });
+
+  const submitterEmail = req.body.email;
 
   try {
     // Save to MongoDB
@@ -198,8 +211,12 @@ app.post('/api/blewer-intake', async (req, res) => {
 
 // Contact form email
 app.post('/api/contact', async (req, res) => {
-  const { name, email, message } = req.body;
+  const { name, email, message, captchaToken } = req.body;
   if (!name || !email || !message) return res.status(400).json({ error: 'All fields required' });
+
+  const captchaValid = await verifyCaptcha(captchaToken).catch(() => false);
+  if (!captchaValid) return res.status(400).json({ error: 'reCAPTCHA verification failed' });
+
   try {
     // Save to MongoDB
     await Contact.create({ name, email, message });
