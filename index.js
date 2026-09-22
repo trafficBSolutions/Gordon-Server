@@ -32,55 +32,80 @@ const transporter = nodemailer.createTransport({
 
 // Blewer intake form — sends to Blewer staff AND confirmation to submitter
 app.post('/api/blewer-intake', async (req, res) => {
-  const { firstName, lastName, address, city, state, zip, phone, email,
-          householdSize, monthlyIncome, needReason, firstVisit, referredBy } = req.body;
+  const { name, ss4, dob, date, spouseName, spouseSs4, spouseDob, phone,
+          address, city, state, zip, members, income1, income2, income3,
+          churchMembership, wantsVisit, signature, signatureDate } = req.body;
 
-  if (!firstName || !lastName || !phone) {
+  if (!name || !phone) {
     return res.status(400).json({ error: 'Name and phone are required' });
   }
 
+  const householdLines = (members || [])
+    .filter(m => m.name)
+    .map(m => `  ${m.name} | SS#: ${m.ss4 || '—'} | DOB: ${m.dob || '—'} | Relationship: ${m.relationship || '—'}`);
+
   const formSummary = [
-    `CLIENT INTAKE FORM SUBMISSION`,
+    `BLEWER FOOD CENTER — CLIENT INTAKE FORM`,
     ``,
-    `Name:             ${firstName} ${lastName}`,
-    `Address:          ${address}, ${city}, ${state} ${zip}`,
-    `Phone:            ${phone}`,
-    `Email:            ${email || 'Not provided'}`,
-    `Household Size:   ${householdSize}`,
-    `Monthly Income:   ${monthlyIncome || 'Not provided'}`,
-    `First Visit:      ${firstVisit === 'yes' ? 'Yes' : 'No'}`,
-    `Referred By:      ${referredBy || 'Not provided'}`,
-    `Reason for Need:  ${needReason || 'Not provided'}`,
+    `PRIMARY APPLICANT`,
+    `  Name:          ${name}`,
+    `  Last 4 SS#:    ${ss4 || '—'}`,
+    `  Date of Birth: ${dob || '—'}`,
+    `  Date:          ${date || '—'}`,
+    ``,
+    `SPOUSE`,
+    `  Name:          ${spouseName || '—'}`,
+    `  Last 4 SS#:    ${spouseSs4 || '—'}`,
+    `  Date of Birth: ${spouseDob || '—'}`,
+    `  Phone:         ${phone}`,
+    ``,
+    `ADDRESS`,
+    `  ${address}, ${city}, ${state} ${zip}`,
+    ``,
+    `OTHERS IN HOUSEHOLD`,
+    ...(householdLines.length ? householdLines : ['  None listed']),
+    ``,
+    `INCOME`,
+    `  Source 1: ${income1 || '—'}`,
+    `  Source 2: ${income2 || '—'}`,
+    `  Source 3: ${income3 || '—'}`,
+    ``,
+    `Church Membership:              ${churchMembership || '—'}`,
+    `Wants call/visit from church:   ${wantsVisit === 'yes' ? 'Yes' : wantsVisit === 'no' ? 'No' : '—'}`,
+    ``,
+    `DECLARATION`,
+    `  Signature: ${signature}`,
+    `  Date:      ${signatureDate || '—'}`,
   ].join('\n');
 
   try {
     // Email 1: notify Blewer staff
     await transporter.sendMail({
       from: `"Blewer Food Center Intake" <${process.env.SMTP_USER}>`,
-      replyTo: email || process.env.SMTP_USER,
       to: 'blewerfoodcenter@gmail.com',
-      subject: `New Client Intake: ${firstName} ${lastName}`,
+      subject: `New Client Intake: ${name}`,
       text: formSummary,
     });
 
-    // Email 2: confirmation to the person who submitted (only if they provided an email)
-    if (email) {
+    // Email 2: confirmation to submitter if they have an email on file
+    const submitterEmail = req.body.email;
+    if (submitterEmail) {
       await transporter.sendMail({
         from: `"Blewer Food Center" <${process.env.SMTP_USER}>`,
-        to: email,
+        to: submitterEmail,
         subject: `We received your intake form`,
         text: [
-          `Dear ${firstName},`,
+          `Dear ${name},`,
           ``,
           `Thank you for submitting your intake form to the Blewer Food Center.`,
           `We have received your information and will be in touch soon.`,
           ``,
           `If you have any questions, please contact us:`,
-          `Phone: (706) 263-2570`,
-          `Email: blewerfoodcenter@gmail.com`,
-          `Address: 373 Morrow Rd SE, Calhoun, GA 30701`,
+          `  Phone: (706) 263-2570`,
+          `  Email: blewerfoodcenter@gmail.com`,
+          `  Address: 373 Morrow Rd SE, Calhoun, GA 30701`,
           ``,
-          `Here is a copy of what you submitted:`,
+          `--- Copy of your submission ---`,
           ``,
           formSummary,
         ].join('\n'),
