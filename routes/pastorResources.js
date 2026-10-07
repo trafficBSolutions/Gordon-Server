@@ -13,11 +13,16 @@ cloudinary.config({
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 500 * 1024 * 1024 } });
 
-const uploadToCloudinary = (buffer, options) => new Promise((resolve, reject) => {
-  const stream = cloudinary.uploader.upload_stream(options, (err, result) => {
-    if (err) reject(err);
-    else resolve(result);
-  });
+const uploadToCloudinary = (buffer, mimetype, originalname, folder) => new Promise((resolve, reject) => {
+  const isPDF = mimetype === 'application/pdf' || originalname.toLowerCase().endsWith('.pdf');
+  const isVideo = mimetype.startsWith('video/');
+  const resource_type = isPDF ? 'raw' : isVideo ? 'video' : 'auto';
+  const cleanName = originalname.replace(/\s+/g, '_').replace(/\.pdf$/i, '');
+  const public_id = `${Date.now()}-${cleanName}`;
+  const stream = cloudinary.uploader.upload_stream(
+    { folder, resource_type, type: 'upload', public_id },
+    (err, result) => { if (err) reject(err); else resolve(result); }
+  );
   stream.end(buffer);
 });
 
@@ -48,13 +53,7 @@ router.post('/upload', auth, upload.single('video'), async (req, res) => {
   const { title, description } = req.body;
   if (!title) return res.status(400).json({ error: 'Title required' });
   try {
-    const result = await uploadToCloudinary(req.file.buffer, {
-      folder: 'pastor-resources',
-      resource_type: 'auto',
-      type: 'upload',
-      access_mode: 'public',
-      public_id: `${Date.now()}-${req.file.originalname.replace(/\s+/g, '_')}`,
-    });
+    const result = await uploadToCloudinary(req.file.buffer, req.file.mimetype, req.file.originalname, 'pastor-resources');
     const resource = await PastorResource.create({
       title,
       url: result.secure_url,
