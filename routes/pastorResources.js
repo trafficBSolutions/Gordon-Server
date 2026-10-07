@@ -17,7 +17,7 @@ const uploadToCloudinary = (buffer, mimetype, originalname, folder) => new Promi
   const isPDF = mimetype === 'application/pdf' || originalname.toLowerCase().endsWith('.pdf');
   const isVideo = mimetype.startsWith('video/');
   const resource_type = isPDF ? 'raw' : isVideo ? 'video' : 'auto';
-  const cleanName = originalname.replace(/\s+/g, '_').replace(/\.pdf$/i, '');
+  const cleanName = originalname.replace(/\s+/g, '_').replace(/\.pdf\.pdf$/i, '.pdf');
   const public_id = `${Date.now()}-${cleanName}`;
   const stream = cloudinary.uploader.upload_stream(
     { folder, resource_type, type: 'upload', public_id },
