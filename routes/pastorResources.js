@@ -17,6 +17,7 @@ const storage = new CloudinaryStorage({
   params: async (req, file) => ({
     folder: 'pastor-resources',
     resource_type: 'auto',
+    access_mode: 'public',
     public_id: `${Date.now()}-${file.originalname.replace(/\s+/g, '_')}`,
   }),
 });
