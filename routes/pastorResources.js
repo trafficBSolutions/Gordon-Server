@@ -2,7 +2,6 @@ const express = require('express');
 const multer = require('multer');
 const router = express.Router();
 const cloudinary = require('cloudinary').v2;
-const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const PastorResource = require('../models/PastorResource');
 const auth = require('./authMiddleware');
 
@@ -12,16 +11,15 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-const storage = new CloudinaryStorage({
-  cloudinary,
-  params: async (req, file) => ({
-    folder: 'pastor-resources',
-    resource_type: 'auto',
-    access_mode: 'public',
-    public_id: `${Date.now()}-${file.originalname.replace(/\s+/g, '_')}`,
-  }),
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 500 * 1024 * 1024 } });
+
+const uploadToCloudinary = (buffer, options) => new Promise((resolve, reject) => {
+  const stream = cloudinary.uploader.upload_stream(options, (err, result) => {
+    if (err) reject(err);
+    else resolve(result);
+  });
+  stream.end(buffer);
 });
-const upload = multer({ storage, limits: { fileSize: 500 * 1024 * 1024 } });
 
 router.get('/', async (req, res) => {
   try {
@@ -50,15 +48,22 @@ router.post('/upload', auth, upload.single('video'), async (req, res) => {
   const { title, description } = req.body;
   if (!title) return res.status(400).json({ error: 'Title required' });
   try {
+    const result = await uploadToCloudinary(req.file.buffer, {
+      folder: 'pastor-resources',
+      resource_type: 'auto',
+      type: 'upload',
+      access_mode: 'public',
+      public_id: `${Date.now()}-${req.file.originalname.replace(/\s+/g, '_')}`,
+    });
     const resource = await PastorResource.create({
       title,
-      url: req.file.path,
+      url: result.secure_url,
       description: description || '',
       type: 'file',
     });
     res.status(201).json(resource);
   } catch (err) {
-    res.status(500).json({ error: 'Server error' });
+    res.status(500).json({ error: 'Upload failed' });
   }
 });
 
